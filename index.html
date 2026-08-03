@@ -300,8 +300,9 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
           <p class="note" id="effort-note"></p>
         </div>
         <div class="fld">
-          <div class="fld-h"><label for="cache">Prompt cache hit rate</label><output id="cache-o"></output></div>
-          <input type="range" id="cache" min="0" max="95" step="5">
+          <div class="fld-h"><label for="cache">Cache hit rate on repeated context</label><output id="cache-o"></output></div>
+          <input type="range" id="cache" min="0" max="98" step="2">
+          <p class="note">Not a share of the whole prompt — the hit rate on whatever step <i>i</i> resends unchanged from step <i>i−1</i>. Only newly-added tokens are always fresh. Lower this for choppier sessions (long pauses, edited-in-place history) that break the cache more often.</p>
         </div>
         <div class="pair" style="margin-top:15px">
           <div class="num"><label for="credit">Credit price ($)</label><input type="number" id="credit" min="0.01" max="5" step="0.01" value="0.20"></div>
@@ -371,6 +372,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
       <h3>How it counts</h3>
       <p>One prompt is an agent loop: each step re-sends the whole conversation, so input grows every step. Step 1 sends the starting context; step <i>n</i> sends that plus <i>n−1</i> growth increments.</p>
       <p>Per a lemonade.gg team member (Aug 2026), a task typically runs <b>300+ steps, depending on the model</b> — presets here default to that scale rather than a handful of steps.</p>
+      <p>Critically, step <i>n</i> doesn't pay full price for all of that: everything already sent in step <i>n−1</i> is an exact repeated prefix, so it's <b>a cache hit almost every time</b> — only the newly-added tokens since the last step were never seen before and must be billed fresh. That's the mechanism that keeps a 150-300-step loop affordable at all; a model that ignored it would overstate real costs by 30-45×.</p>
       <p>Once re-sent context nears a model's window, real agent loops summarize or drop older turns instead of growing forever — so context here is <b>capped at 90% of the window</b> (200k assumed for Composer 2.5, whose window isn't published) and holds near that ceiling for the rest of a long run. The "Peak context" tile flags when a run is capped.</p>
       <p>Output is billed as visible tokens <b>plus reasoning tokens</b> — reasoning bills at the output rate on every model here.</p>
     </div>
@@ -378,7 +380,8 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
       <h3>Assumptions you can move</h3>
       <ul>
         <li>Reasoning-token volume at default effort is an estimate per model, not a published figure. The slider scales it.</li>
-        <li>Cache hit rate defaults to 70% — typical for an agent loop with a stable prefix.</li>
+        <li>Cache hit rate on the repeated prefix defaults to 90% — a stable, fast-cadence agent loop should rarely miss the cache.</li>
+        <li>Per-step context growth and output size (the "job size" presets) are calibrated to a real reported number: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits. Move the sliders for a specific task — these are estimates, not published figures.</li>
         <li>Markup × is 1.0: this meters the raw model cost. Lemonade's own margin is not published — if you observe that a prompt costs 3× this, set 3.</li>
         <li>The 300+-step figure and the context-cap-then-hold behavior are both this tool's modeling choices, not lemonade's published mechanics — move the steps slider freely for a specific task.</li>
       </ul>
@@ -417,14 +420,19 @@ const MODELS = [
 ];
 
 /* Step counts per a lemonade.gg team member (Aug 2026): the agent loop
-   "does 300+ steps on average, depends on model, usually 300+ for most tasks." */
+   "does 300+ steps on average, depends on model, usually 300+ for most tasks."
+   Per-step context/output size is calibrated against a real reported data
+   point: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits (~$0.10) — that only
+   comes out right once prompt caching is modeled as a growing prefix (see
+   estimate() below); a flat cache-hit-of-total-context model overstated the
+   same run by 30-45×. */
 const PRESETS = {
-  quick:   { steps:40,  ctx:15000, growth:3000, out:600  },
-  feature: { steps:150, ctx:20000, growth:4000, out:900  },
-  big:     { steps:320, ctx:30000, growth:5000, out:1400 }
+  quick:   { steps:40,  ctx:2000, growth:150, out:150 },
+  feature: { steps:150, ctx:3000, growth:250, out:200 },
+  big:     { steps:320, ctx:4000, growth:350, out:280 }
 };
 
-const S = { model:"opu", preset:"feature", effort:100, cache:70, credit:0.20, markup:1, promo:true,
+const S = { model:"opu", preset:"feature", effort:100, cache:90, credit:0.20, markup:1, promo:true,
             ...PRESETS.feature };
 
 /* ── pricing ─────────────────────────────────────────────────────────────── */
@@ -444,8 +452,17 @@ function baseRates(m, promo){ return (!promo && m.list) ? m.list : { inp:m.inp, 
 const CAP_FRAC = 0.90, UNPUBLISHED_CTX_ASSUMPTION = 200000;
 function contextCap(m){ return m.ctx ? m.ctx*CAP_FRAC : UNPUBLISHED_CTX_ASSUMPTION; }
 
+/* Prompt caching in a real agent loop isn't "X% of the whole prompt happens
+   to be cached" — it's a growing PREFIX. Step i resends everything step i-1
+   already sent, token-for-token, plus whatever's new this turn. That old
+   prefix is (almost) always an exact cache hit; only the newly-appended
+   tokens were never seen before and can't be. So "cache hit rate" here means
+   the hit rate on that carried-over prefix (misses ~ TTL expiry, reordering),
+   not a flat fraction of total context. This is *why* long agent loops stay
+   cheap in practice, and skipping it is the single biggest way to overstate
+   their cost. */
 function estimate(m, s){
-  const cacheFrac = s.cache/100, reason = m.reason * (s.effort/100);
+  const hit = s.cache/100, reason = m.reason * (s.effort/100);
   const cap = contextCap(m);
   let inUsd=0, outUsd=0, reasonUsd=0, tokIn=0, tokOut=0, tiered=false, first=0, last=0, capped=false;
   for (let i=0;i<s.steps;i++){
@@ -454,8 +471,10 @@ function estimate(m, s){
     if (raw > cap) capped = true;
     const r = rates(m, prompt, s.promo);
     if (m.tier && prompt >= m.tier.over) tiered = true;
-    const cached = prompt*cacheFrac, fresh = prompt-cached;
-    const stepIn = (fresh*r.inp + cached*r.cache)/1e6;
+    const fresh = i===0 ? prompt : Math.min(s.growth, prompt);
+    const carried = Math.max(0, prompt - fresh);
+    const cachedTok = carried*hit, freshTok = fresh + carried*(1-hit);
+    const stepIn = (freshTok*r.inp + cachedTok*r.cache)/1e6;
     const stepOut = s.out*r.out/1e6;
     const stepReason = s.out*reason*r.out/1e6;
     inUsd += stepIn; outUsd += stepOut; reasonUsd += stepReason;
