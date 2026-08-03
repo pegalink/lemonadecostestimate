@@ -348,8 +348,8 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
           <div class="num"><label for="credit">Credit price ($)</label><input type="number" id="credit" min="0.01" max="5" step="0.01" value="0.20"></div>
           <div class="num"><label for="markup">Platform markup ×</label><input type="number" id="markup" min="1" max="20" step="0.1" value="1"></div>
         </div>
-        <label class="chk"><input type="checkbox" id="promo" checked>
-          <span>Apply <b>OpenRouter's 50% off</b> on GPT-5.6 Luna. Uncheck to see what happens when the promo ends.</span></label>
+        <label class="chk"><input type="checkbox" id="promo">
+          <span>Apply <b>OpenRouter's temporary 50% off</b> on GPT-5.6 Luna. Off by default — real-world comparisons (and Hy3 being ~30% cheaper per task, confirmed independently) line up with Luna's standard list price, not this promo.</span></label>
       </div>
     </section>
   </div>
@@ -428,7 +428,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
     </div>
     <div>
       <h3>Prices</h3>
-      <p>Pulled from the OpenRouter models API on <b>3 August 2026</b>, default route per model. Luna carries a <b>50% discount</b> flag on its OpenAI endpoints and a higher tier above 272k prompt tokens; both are modelled.</p>
+      <p>Pulled from the OpenRouter models API on <b>3 August 2026</b>, default route per model. Luna carries a temporary <b>50% discount</b> flag on its OpenAI endpoints (off by default here — see the checkbox) and a higher tier above 272k prompt tokens; both are modelled.</p>
       <p><b>Composer 2.5 is not on OpenRouter</b> — no Cursor models are. Its $0.50 / $2.50 comes from Cursor's own API pricing, and its cache rate is assumed at 10% of input.</p>
       <p>Hy3 is priced on Tencent's route; GMICloud lists it ~2% cheaper.</p>
       <p><b>GLM 5.2</b> is priced on OpenRouter's default (cheapest) route, currently Novita at a 56% discount. Lemonade describes it as a "fast option," but there's no separate "-fast" model on OpenRouter — just the one GLM 5.2, priced here as-is.</p>
@@ -478,7 +478,7 @@ const PRESETS = {
   big:     { steps:320, ctx:4000, growth:350, out:280 }
 };
 
-const S = { model:"opu", preset:"feature", effort:100, cache:90, credit:0.20, markup:1, promo:true,
+const S = { model:"opu", preset:"feature", effort:100, cache:90, credit:0.20, markup:1, promo:false,
             ...PRESETS.feature };
 
 /* ── pricing ─────────────────────────────────────────────────────────────── */
