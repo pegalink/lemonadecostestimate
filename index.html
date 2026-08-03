@@ -65,6 +65,30 @@ a:hover{text-decoration-color:var(--accent-line)}
 .mast-rule{max-width:1180px;margin:0 auto;padding:0 20px}
 .mast-rule div{height:1px;background:var(--ink);opacity:.28;margin-top:3px}
 
+/* ── disclaimer banner ────────────────────────────────────── */
+.banner{max-width:1180px;margin:0 auto;padding:11px 20px;display:flex;align-items:flex-start;gap:10px;
+  font-size:12.5px;line-height:1.5;color:var(--ink-2);background:color-mix(in srgb,var(--accent) 12%,var(--plane))}
+.banner-ic{flex:none;font-size:14px;line-height:1.4;color:var(--accent-ink)}
+.banner b{color:var(--ink)}
+.banner a{color:var(--ink);text-decoration-color:var(--accent-line)}
+
+/* ── disclaimer modal (first visit) ──────────────────────── */
+.disc-overlay{position:fixed;inset:0;z-index:100;background:rgba(11,11,11,.55);
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.disc-overlay[hidden]{display:none}
+.disc-modal{max-width:460px;width:100%;background:var(--surface);border:1px solid var(--hairline);
+  border-radius:12px;padding:24px 26px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.disc-modal h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:9px}
+.disc-modal .ic{font-size:19px;color:var(--accent-ink);background:var(--accent);width:30px;height:30px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none}
+.disc-modal p{font-size:13px;color:var(--ink-2);line-height:1.55;margin:12px 0 0}
+.disc-modal p b{color:var(--ink)}
+.disc-modal button{margin-top:18px;width:100%;padding:11px;border-radius:8px;border:1px solid var(--accent-line);
+  background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-size:12.5px;
+  text-transform:uppercase;letter-spacing:.06em;font-weight:700;cursor:pointer}
+.disc-modal button:hover{filter:brightness(1.05)}
+.disc-modal button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
 /* ── layout ───────────────────────────────────────────────── */
 .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 0;
   display:grid;grid-template-columns:minmax(0,352px) minmax(0,1fr);gap:22px;align-items:start}
@@ -232,6 +256,17 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
 </head>
 <body>
 
+<div class="disc-overlay" id="disc-overlay" hidden>
+  <div class="disc-modal" role="alertdialog" aria-labelledby="disc-title" aria-describedby="disc-body">
+    <h2 id="disc-title"><span class="ic">⚠</span>This is an estimate, not a bill</h2>
+    <div id="disc-body">
+      <p>Everything on this page is modeled from <b>public OpenRouter pricing</b> plus a small number of real, self-reported tests — not from lemonade.gg's own billing data, which isn't published.</p>
+      <p>Real costs have already moved this estimate by <b>20-45×</b> during testing, purely from correcting assumptions about how caching and agent steps actually bill. Treat every number here as a rough order of magnitude, not a quote — your actual cost can differ substantially by task, model, and session.</p>
+    </div>
+    <button id="disc-dismiss" type="button">Understood — show the estimate</button>
+  </div>
+</div>
+
 <header class="mast">
   <div class="mast-in">
     <div class="brand">
@@ -254,6 +289,11 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
   </div>
 </header>
 <div class="mast-rule"><div></div></div>
+
+<div class="banner" role="note">
+  <span class="banner-ic">⚠</span>
+  <span><b>Estimate only.</b> This is modeled from public pricing and a couple of real tests — it is not lemonade.gg's bill, and actual cost can vary significantly by task, model, and session. See <a href="#how-it-counts">how it counts</a> below.</span>
+</div>
 
 <main class="wrap">
 
@@ -368,11 +408,10 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
 
 <footer class="foot">
   <div class="foot-in">
-    <div>
+    <div id="how-it-counts">
       <h3>How it counts</h3>
-      <p>One prompt is an agent loop: each step re-sends the whole conversation, so input grows every step. Step 1 sends the starting context; step <i>n</i> sends that plus <i>n−1</i> growth increments.</p>
-      <p>Per a lemonade.gg team member (Aug 2026), a task typically runs <b>300+ steps, depending on the model</b> — presets here default to that scale rather than a handful of steps.</p>
-      <p>Critically, step <i>n</i> doesn't pay full price for all of that: everything already sent in step <i>n−1</i> is an exact repeated prefix, so it's <b>a cache hit almost every time</b> — only the newly-added tokens since the last step were never seen before and must be billed fresh. That's the mechanism that keeps a 150-300-step loop affordable at all; a model that ignored it would overstate real costs by 30-45×.</p>
+      <p>Per a lemonade.gg team member (Aug 2026), a task typically runs <b>300+ steps, depending on the model</b> — presets here default to that scale rather than a handful of steps. But "steps" shown in an agent UI aren't one-to-one with billed LLM calls: a single completion often chains several tool calls (read a file, edit it, run a check) before it's actually charged as one request. This tool assumes <b>10 shown steps per billed call</b> — calibrated against a real test ("make me a double jump system" on GPT-5.6 Luna, ~240 shown steps, ~0.05 credits actual cost); treating every shown step as its own full billed call overstated that same run by ~20×.</p>
+      <p>Each <i>billed call</i> re-sends the whole conversation so far, so input grows call over call — but call <i>n</i> doesn't pay full price for all of that: everything already sent in call <i>n−1</i> is an exact repeated prefix, so it's <b>a cache hit almost every time</b>, and only the newly-added tokens since the last call were never seen before and must be billed fresh.</p>
       <p>Once re-sent context nears a model's window, real agent loops summarize or drop older turns instead of growing forever — so context here is <b>capped at 90% of the window</b> (200k assumed for Composer 2.5, whose window isn't published) and holds near that ceiling for the rest of a long run. The "Peak context" tile flags when a run is capped.</p>
       <p>Output is billed as visible tokens <b>plus reasoning tokens</b> — reasoning bills at the output rate on every model here.</p>
     </div>
@@ -381,7 +420,8 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
       <ul>
         <li>Reasoning-token volume at default effort is an estimate per model, not a published figure. The slider scales it.</li>
         <li>Cache hit rate on the repeated prefix defaults to 90% — a stable, fast-cadence agent loop should rarely miss the cache.</li>
-        <li>Per-step context growth and output size are calibrated to a real reported number: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits. The "feature" preset's step count (240) comes from a separate first-party test on the same model — "make me a double jump system" — which is why it doesn't land on a round number. Move the sliders for a specific task — these are estimates, not published figures.</li>
+        <li>The 10-shown-steps-per-billed-call ratio is this tool's biggest assumption and the least certain — lemonade hasn't published how its step counter relates to billed calls. It's back-solved from one real data point; a different task could easily land at a different ratio.</li>
+        <li>Per-call context growth and output size are calibrated to that same real reported number: GPT-5.6 Luna, ~240 shown steps, ~0.05 credits. The "feature" preset's step count (240) is that same test's shown-step count, which is why it doesn't land on a round number.</li>
         <li>Markup × is 1.0: this meters the raw model cost. Lemonade's own margin is not published — if you observe that a prompt costs 3× this, set 3.</li>
         <li>The 300+-step figure and the context-cap-then-hold behavior are both this tool's modeling choices, not lemonade's published mechanics — move the steps slider freely for a specific task.</li>
       </ul>
@@ -467,11 +507,24 @@ function contextCap(m){ return m.ctx ? m.ctx*CAP_FRAC : UNPUBLISHED_CTX_ASSUMPTI
    not a flat fraction of total context. This is *why* long agent loops stay
    cheap in practice, and skipping it is the single biggest way to overstate
    their cost. */
+/* The "agent steps" shown in lemonade's UI aren't one-to-one with billed LLM
+   calls. A single completion routinely chains several tool calls (read a
+   file, edit it, run a check) before it's actually charged as one request —
+   the product's step counter almost certainly counts those fine-grained UI
+   actions, not API calls. Calibrated against a real test: "make me a double
+   jump system" on GPT-5.6 Luna ran ~240 shown steps for a real cost of
+   ~0.05 credits — which only lands right at ~10 shown steps per billed call
+   (at this tool's per-call context/output size); treating all 240 as
+   separate full billed calls overstated that same run by ~20×. */
+const STEPS_PER_BILLED_CALL = 10;
+function billedCalls(steps){ return Math.max(1, Math.round(steps/STEPS_PER_BILLED_CALL)); }
+
 function estimate(m, s){
   const hit = s.cache/100, reason = m.reason * (s.effort/100);
   const cap = contextCap(m);
+  const calls = billedCalls(s.steps);
   let inUsd=0, outUsd=0, reasonUsd=0, tokIn=0, tokOut=0, tiered=false, first=0, last=0, capped=false;
-  for (let i=0;i<s.steps;i++){
+  for (let i=0;i<calls;i++){
     const raw = s.ctx + i*s.growth;
     const prompt = Math.min(raw, cap);
     if (raw > cap) capped = true;
@@ -603,10 +656,11 @@ function render(){
 
   /* tiles */
   const cheapest = MODELS.map(x => estimate(x,S).total).reduce((a,b)=>Math.min(a,b));
-  const rawPeak = S.ctx + (S.steps-1)*S.growth;
+  const calls = billedCalls(S.steps);
+  const rawPeak = S.ctx + (calls-1)*S.growth;
   const peak = Math.min(rawPeak, e.cap);
   $("tiles").innerHTML = [
-    ["Cost per step", usd(e.total/S.steps), `step 1 ${usd(e.first)} → step ${S.steps} ${usd(e.last)}`],
+    ["Cost per step shown", usd(e.total/S.steps), `${calls} billed call${calls===1?"":"s"}: 1st ${usd(e.first)} → last ${usd(e.last)}`],
     ["Credits per 10 prompts", credits(e.credits*10), S.steps>=100 ? "a long-running task, ×10" : "a normal afternoon"],
     ["vs cheapest here", (e.total/cheapest).toFixed(1)+"×", e.total===cheapest ? "this is the floor" : "more than the cheapest"],
     ["Peak context", tok(peak), e.capped ? `capped — held near ${tok(e.cap)} by compaction` : (m.ctx ? tok(m.ctx)+" window" : "assumed 200k window")]
@@ -659,6 +713,24 @@ function render(){
 syncInputs();
 $("cache").value = S.cache; $("effort").value = S.effort;
 render();
+
+/* ── first-visit disclaimer gate ─────────────────────────────────────────── */
+(function(){
+  const KEY = "lcm_disclaimer_seen_v1";
+  const overlay = $("disc-overlay");
+  let seen = false;
+  try { seen = localStorage.getItem(KEY) === "1"; } catch(e) {}
+  if (!seen){
+    overlay.hidden = false;
+    document.body.style.overflow = "hidden";
+    $("disc-dismiss").focus();
+  }
+  $("disc-dismiss").addEventListener("click", () => {
+    overlay.hidden = true;
+    document.body.style.overflow = "";
+    try { localStorage.setItem(KEY, "1"); } catch(e) {}
+  });
+})();
 </script>
 </body>
 </html>
