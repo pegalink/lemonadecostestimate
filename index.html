@@ -381,7 +381,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
       <ul>
         <li>Reasoning-token volume at default effort is an estimate per model, not a published figure. The slider scales it.</li>
         <li>Cache hit rate on the repeated prefix defaults to 90% — a stable, fast-cadence agent loop should rarely miss the cache.</li>
-        <li>Per-step context growth and output size (the "job size" presets) are calibrated to a real reported number: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits. Move the sliders for a specific task — these are estimates, not published figures.</li>
+        <li>Per-step context growth and output size are calibrated to a real reported number: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits. The "feature" preset's step count (240) comes from a separate first-party test on the same model — "make me a double jump system" — which is why it doesn't land on a round number. Move the sliders for a specific task — these are estimates, not published figures.</li>
         <li>Markup × is 1.0: this meters the raw model cost. Lemonade's own margin is not published — if you observe that a prompt costs 3× this, set 3.</li>
         <li>The 300+-step figure and the context-cap-then-hold behavior are both this tool's modeling choices, not lemonade's published mechanics — move the steps slider freely for a specific task.</li>
       </ul>
@@ -428,10 +428,13 @@ const MODELS = [
    point: GPT-5.6 Luna, ~150-200 steps, cost ~0.5 credits (~$0.10) — that only
    comes out right once prompt caching is modeled as a growing prefix (see
    estimate() below); a flat cache-hit-of-total-context model overstated the
-   same run by 30-45×. */
+   same run by 30-45×. The "feature" step count is set from a second,
+   independent first-party test: "make me a double jump system" on GPT-5.6
+   Luna ran ~240 steps — a single, ordinary feature-sized task, which is
+   exactly what this preset represents. */
 const PRESETS = {
   quick:   { steps:40,  ctx:2000, growth:150, out:150 },
-  feature: { steps:150, ctx:3000, growth:250, out:200 },
+  feature: { steps:240, ctx:3000, growth:250, out:200 },
   big:     { steps:320, ctx:4000, growth:350, out:280 }
 };
 
