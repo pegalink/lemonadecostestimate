@@ -276,7 +276,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
 
         <div class="fld" style="margin-top:15px">
           <div class="fld-h"><label for="steps">Agent steps per prompt</label><output id="steps-o"></output></div>
-          <input type="range" id="steps" min="1" max="400" step="1">
+          <input type="range" id="steps" min="1" max="800" step="1">
         </div>
         <div class="fld">
           <div class="fld-h"><label for="ctx">Context at step 1</label><output id="ctx-o"></output></div>
@@ -370,6 +370,8 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
     <div>
       <h3>How it counts</h3>
       <p>One prompt is an agent loop: each step re-sends the whole conversation, so input grows every step. Step 1 sends the starting context; step <i>n</i> sends that plus <i>n−1</i> growth increments.</p>
+      <p>Per a lemonade.gg team member (Aug 2026), a task typically runs <b>300+ steps, depending on the model</b> — presets here default to that scale rather than a handful of steps.</p>
+      <p>Once re-sent context nears a model's window, real agent loops summarize or drop older turns instead of growing forever — so context here is <b>capped at 90% of the window</b> (200k assumed for Composer 2.5, whose window isn't published) and holds near that ceiling for the rest of a long run. The "Peak context" tile flags when a run is capped.</p>
       <p>Output is billed as visible tokens <b>plus reasoning tokens</b> — reasoning bills at the output rate on every model here.</p>
     </div>
     <div>
@@ -378,6 +380,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
         <li>Reasoning-token volume at default effort is an estimate per model, not a published figure. The slider scales it.</li>
         <li>Cache hit rate defaults to 70% — typical for an agent loop with a stable prefix.</li>
         <li>Markup × is 1.0: this meters the raw model cost. Lemonade's own margin is not published — if you observe that a prompt costs 3× this, set 3.</li>
+        <li>The 300+-step figure and the context-cap-then-hold behavior are both this tool's modeling choices, not lemonade's published mechanics — move the steps slider freely for a specific task.</li>
       </ul>
     </div>
     <div>
@@ -413,10 +416,12 @@ const MODELS = [
     tier:{ over:272000, promo:{ inp:0.20, out:0.90, cache:0.02 }, list:{ inp:0.40, out:1.80, cache:0.04 } } }
 ];
 
+/* Step counts per a lemonade.gg team member (Aug 2026): the agent loop
+   "does 300+ steps on average, depends on model, usually 300+ for most tasks." */
 const PRESETS = {
-  quick:   { steps:4,  ctx:12000, growth:3000,  out:500  },
-  feature: { steps:10, ctx:25000, growth:6000,  out:900  },
-  big:     { steps:60, ctx:40000, growth:9000,  out:1400 }
+  quick:   { steps:40,  ctx:15000, growth:3000, out:600  },
+  feature: { steps:150, ctx:20000, growth:4000, out:900  },
+  big:     { steps:320, ctx:30000, growth:5000, out:1400 }
 };
 
 const S = { model:"opu", preset:"feature", effort:100, cache:70, credit:0.20, markup:1, promo:true,
@@ -430,11 +435,23 @@ function rates(m, promptTokens, promo){
 }
 function baseRates(m, promo){ return (!promo && m.list) ? m.list : { inp:m.inp, out:m.out, cache:m.cache }; }
 
+/* At 300+ steps, naive linear growth would blow past any model's context
+   window in the first third of a run. Real agent loops don't do that — once
+   context nears the window, they summarize/drop older turns and hold steady
+   near the ceiling instead of failing or growing forever. We model that as a
+   cap at 90% of the window (a 200k assumption for Composer 2.5, whose window
+   isn't published). */
+const CAP_FRAC = 0.90, UNPUBLISHED_CTX_ASSUMPTION = 200000;
+function contextCap(m){ return m.ctx ? m.ctx*CAP_FRAC : UNPUBLISHED_CTX_ASSUMPTION; }
+
 function estimate(m, s){
   const cacheFrac = s.cache/100, reason = m.reason * (s.effort/100);
-  let inUsd=0, outUsd=0, reasonUsd=0, tokIn=0, tokOut=0, tiered=false, first=0, last=0;
+  const cap = contextCap(m);
+  let inUsd=0, outUsd=0, reasonUsd=0, tokIn=0, tokOut=0, tiered=false, first=0, last=0, capped=false;
   for (let i=0;i<s.steps;i++){
-    const prompt = s.ctx + i*s.growth;
+    const raw = s.ctx + i*s.growth;
+    const prompt = Math.min(raw, cap);
+    if (raw > cap) capped = true;
     const r = rates(m, prompt, s.promo);
     if (m.tier && prompt >= m.tier.over) tiered = true;
     const cached = prompt*cacheFrac, fresh = prompt-cached;
@@ -450,7 +467,7 @@ function estimate(m, s){
   const mk = s.markup;
   const total = (inUsd+outUsd+reasonUsd)*mk;
   return { inUsd:inUsd*mk, outUsd:outUsd*mk, reasonUsd:reasonUsd*mk, total,
-           credits: total/s.credit, tokIn, tokOut, tiered,
+           credits: total/s.credit, tokIn, tokOut, tiered, capped, cap,
            first:first*mk, last:last*mk, reason };
 }
 
@@ -561,13 +578,13 @@ function render(){
 
   /* tiles */
   const cheapest = MODELS.map(x => estimate(x,S).total).reduce((a,b)=>Math.min(a,b));
-  const ctxMax = S.ctx + (S.steps-1)*S.growth;
-  const overflow = m.ctx && ctxMax > m.ctx;
+  const rawPeak = S.ctx + (S.steps-1)*S.growth;
+  const peak = Math.min(rawPeak, e.cap);
   $("tiles").innerHTML = [
     ["Cost per step", usd(e.total/S.steps), `step 1 ${usd(e.first)} → step ${S.steps} ${usd(e.last)}`],
-    ["Credits per 10 prompts", credits(e.credits*10), "a normal afternoon"],
+    ["Credits per 10 prompts", credits(e.credits*10), S.steps>=100 ? "a long-running task, ×10" : "a normal afternoon"],
     ["vs cheapest here", (e.total/cheapest).toFixed(1)+"×", e.total===cheapest ? "this is the floor" : "more than the cheapest"],
-    ["Peak context", tok(ctxMax), overflow ? "⚠ over this model's window" : (m.ctx ? tok(m.ctx)+" window" : "window not published")]
+    ["Peak context", tok(peak), e.capped ? `capped — held near ${tok(e.cap)} by compaction` : (m.ctx ? tok(m.ctx)+" window" : "assumed 200k window")]
   ].map(([k,v,s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
   /* split */
