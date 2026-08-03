@@ -276,7 +276,7 @@ kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1p
 
         <div class="fld" style="margin-top:15px">
           <div class="fld-h"><label for="steps">Agent steps per prompt</label><output id="steps-o"></output></div>
-          <input type="range" id="steps" min="1" max="60" step="1">
+          <input type="range" id="steps" min="1" max="400" step="1">
         </div>
         <div class="fld">
           <div class="fld-h"><label for="ctx">Context at step 1</label><output id="ctx-o"></output></div>
@@ -416,7 +416,7 @@ const MODELS = [
 const PRESETS = {
   quick:   { steps:4,  ctx:12000, growth:3000,  out:500  },
   feature: { steps:10, ctx:25000, growth:6000,  out:900  },
-  big:     { steps:25, ctx:40000, growth:10000, out:1400 }
+  big:     { steps:60, ctx:40000, growth:9000,  out:1400 }
 };
 
 const S = { model:"opu", preset:"feature", effort:100, cache:70, credit:0.20, markup:1, promo:true,
